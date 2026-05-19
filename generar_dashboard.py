@@ -561,7 +561,8 @@ async function subirArchivo() {{
   try {{
     const response = await fetch('/upload', {{
       method: 'POST',
-      body: formData
+      body: formData,
+      credentials: 'include'
     }});
     const result = await response.json();
     
@@ -582,7 +583,8 @@ async function generarDashboard() {{
   
   try {{
     const response = await fetch('/generate', {{
-      method: 'POST'
+      method: 'POST',
+      credentials: 'include'
     }});
     const result = await response.json();
     
@@ -602,7 +604,9 @@ async function listarArchivos() {{
   filesList.innerHTML = 'Cargando archivos...';
   
   try {{
-    const response = await fetch('/api/files');
+    const response = await fetch('/api/files', {{
+      credentials: 'include'
+    }});
     const result = await response.json();
     
     if (response.ok) {{

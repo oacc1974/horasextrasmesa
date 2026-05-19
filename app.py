@@ -1,11 +1,37 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 import os
 import tempfile
 import shutil
+from functools import wraps
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
+
+# Credenciales de autenticación
+AUTH_USERNAME = "admin"
+AUTH_PASSWORD = "admin*666"
+
+def check_auth(username, password):
+    """Verifica las credenciales"""
+    return username == AUTH_USERNAME and password == AUTH_PASSWORD
+
+def authenticate():
+    """Envina respuesta de autenticación requerida"""
+    return Response(
+        'Autenticación requerida. Ingresa usuario y contraseña.',
+        401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+def requires_auth(f):
+    """Decorador para requerir autenticación"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
 
 # Directorio base del proyecto
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +41,7 @@ INFO_DIR = os.path.join(BASE_DIR, "Info")
 os.makedirs(INFO_DIR, exist_ok=True)
 
 @app.route('/')
+@requires_auth
 def index():
     """Servir el dashboard HTML estático"""
     index_path = os.path.join(BASE_DIR, "index.html")
@@ -23,6 +50,7 @@ def index():
     return "<h1>Dashboard no encontrado. Ejecuta generar_dashboard.py primero.</h1>", 404
 
 @app.route('/upload', methods=['POST'])
+@requires_auth
 def upload_file():
     """Subir un archivo Excel al directorio Info"""
     if 'file' not in request.files:
@@ -42,6 +70,7 @@ def upload_file():
     return jsonify({'success': True, 'filename': file.filename})
 
 @app.route('/generate', methods=['POST'])
+@requires_auth
 def generate_dashboard():
     """Ejecutar el script de generación del dashboard"""
     try:
@@ -57,6 +86,7 @@ def generate_dashboard():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/files', methods=['GET'])
+@requires_auth
 def list_files():
     """Listar archivos Excel en el directorio Info"""
     try:
@@ -66,6 +96,7 @@ def list_files():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/files/<filename>', methods=['DELETE'])
+@requires_auth
 def delete_file(filename):
     """Eliminar un archivo Excel del directorio Info"""
     try:
