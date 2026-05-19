@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Horas Extras</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; background:#0f172a; color:#e2e8f0; }
+.header { background:linear-gradient(135deg,#1e293b,#334155); padding:20px 30px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 4px 12px rgba(0,0,0,.3); }
+.header h1 { font-size:1.5rem; color:#38bdf8; }
+.header span { color:#94a3b8; font-size:.85rem; }
+.filters { background:#1e293b; padding:16px 30px; display:flex; gap:20px; flex-wrap:wrap; align-items:center; border-bottom:1px solid #334155; }
+.filters label { color:#94a3b8; font-size:.8rem; margin-right:4px; }
+.filters select, .filters input { background:#0f172a; color:#e2e8f0; border:1px solid #475569; border-radius:6px; padding:6px 10px; font-size:.85rem; }
+.filters select { min-width:180px; max-height:32px; }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; padding:20px 30px; }
+.kpi { background:linear-gradient(135deg,#1e293b,#263348); border-radius:12px; padding:20px; text-align:center; border:1px solid #334155; }
+.kpi .value { font-size:1.8rem; font-weight:700; color:#38bdf8; }
+.kpi .label { color:#94a3b8; font-size:.8rem; margin-top:4px; }
+.charts { padding:20px 30px; display:grid; gap:20px; }
+.chart-row { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.chart-box { background:#1e293b; border-radius:12px; padding:20px; border:1px solid #334155; }
+.chart-box.full { grid-column:1/-1; }
+.chart-box h3 { color:#38bdf8; margin-bottom:12px; font-size:.95rem; }
+canvas { max-height:400px; }
+table { width:100%; border-collapse:collapse; font-size:.78rem; }
+th { background:#334155; color:#38bdf8; padding:8px; text-align:left; position:sticky; top:0; }
+td { padding:6px 8px; border-bottom:1px solid #1e293b; }
+tr:hover td { background:#334155; }
+.table-wrap { max-height:400px; overflow-y:auto; border-radius:8px; }
+.money { color:#4ade80; }
+@media(max-width:900px){ .chart-row { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 Dashboard Consolidado Horas Extras</h1>
+  <span>INT FOOD SERVICES CORP</span>
+</div>
+
+<div class="filters">
+  <div>
+    <label>Periodo Desde:</label>
+    <select id="filtroDesde"></select>
+  </div>
+  <div>
+    <label>Periodo Hasta:</label>
+    <select id="filtroHasta"></select>
+  </div>
+  <div>
+    <label>Empleado:</label>
+    <select id="filtroEmpleado"><option value="">Todos</option></select>
+  </div>
+  <div>
+    <button onclick="aplicarFiltros()" style="background:#38bdf8;color:#0f172a;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:600;">Filtrar</button>
+    <button onclick="resetFiltros()" style="background:#475569;color:#e2e8f0;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;margin-left:6px;">Reset</button>
+  </div>
+</div>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="charts">
+  <div class="chart-row">
+    <div class="chart-box"><h3>Horas Extras por Empleado (Consolidado)</h3><canvas id="chartHorasEmp"></canvas></div>
+    <div class="chart-box"><h3>Total a Cancelar por Empleado</h3><canvas id="chartPagoEmp"></canvas></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-box"><h3>Horas Extras por Periodo</h3><canvas id="chartHorasPeriodo"></canvas></div>
+    <div class="chart-box"><h3>Gasto Total por Periodo</h3><canvas id="chartGastoPeriodo"></canvas></div>
+  </div>
+  <div class="chart-box full"><h3>Detalle por Empleado y Periodo (Valores Pagados)</h3><canvas id="chartValoresDetalle"></canvas></div>
+  <div class="chart-box full">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3>Tabla Detallada</h3>
+      <button onclick="exportarExcel()" style="background:#10b981;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:6px;">
+        📥 Exportar Excel
+      </button>
+    </div>
+    <div class="table-wrap" id="tablaWrap"></div>
+  </div>
+</div>
+
+<script>
+const DATA = [{"nombre": "PARADA SILVA HUGO ANDRES", "sueldo": 660, "periodo": "Abr-May 2026", "orden": 6, "fechaInicio": "2026-04-15", "fechaFin": "2026-05-14", "totalHoras": 201.0, "h25": 35.0, "h50": 15.0, "h100": 26.0, "v25": 24.06, "v50": 61.88, "v100": 143.0, "total": 228.94}, {"nombre": "SERRANO GUAMAN JOSE MIGUEL", "sueldo": 660, "periodo": "Abr-May 2026", "orden": 6, "fechaInicio": "2026-04-15", "fechaFin": "2026-05-14", "totalHoras": 168.0, "h25": 71.0, "h50": 0, "h100": 8.0, "v25": 48.81, "v50": 0.0, "v100": 44.0, "total": 92.81}, {"nombre": "REYES MALDONADO MELANIE GABRIELA", "sueldo": 660, "periodo": "Abr-May 2026", "orden": 6, "fechaInicio": "2026-04-15", "fechaFin": "2026-05-14", "totalHoras": 168.0, "h25": 78.0, "h50": 0, "h100": 0, "v25": 53.62, "v50": 0.0, "v100": 0.0, "total": 53.62}, {"nombre": "PHILCO BAQUE JORGE FERNANDO", "sueldo": 660, "periodo": "Abr-May 2026", "orden": 6, "fechaInicio": "2026-04-15", "fechaFin": "2026-05-14", "totalHoras": 88.0, "h25": 58.0, "h50": 0, "h100": 16.0, "v25": 39.88, "v50": 0.0, "v100": 88.0, "total": 127.88}, {"nombre": "BAQUERIZO PALACIOS GABRIEL NATHANAEL", "sueldo": 660, "periodo": "Abr-May 2026", "orden": 6, "fechaInicio": "2026-04-15", "fechaFin": "2026-05-14", "totalHoras": 140.0, "h25": 0, "h50": 0, "h100": 20.0, "v25": 0.0, "v50": 0.0, "v100": 110.0, "total": 110.0}, {"nombre": "RODRIGUEZ DIEZ BRYAN XAVIER", "sueldo": 660, "periodo": "Abr-May 2026", "orden": 6, "fechaInicio": "2026-04-15", "fechaFin": "2026-05-14", "totalHoras": 168.0, "h25": 83.0, "h50": 0, "h100": 8.0, "v25": 57.06, "v50": 0.0, "v100": 44.0, "total": 101.06}, {"nombre": "GONZALEZ ROMO ISAAC ANDRES", "sueldo": 660, "periodo": "Abr-May 2026", "orden": 6, "fechaInicio": "2026-04-15", "fechaFin": "2026-05-14", "totalHoras": 176.0, "h25": 49.0, "h50": 0, "h100": 16.0, "v25": 33.69, "v50": 0.0, "v100": 88.0, "total": 121.69}, {"nombre": "SANCHEZ MACIAS MADELINE NATHALY", "sueldo": 660, "periodo": "Abr-May 2026", "orden": 6, "fechaInicio": "2026-04-15", "fechaFin": "2026-05-14", "totalHoras": 160.0, "h25": 42.0, "h50": 0, "h100": 0, "v25": 28.88, "v50": 0.0, "v100": 0.0, "total": 28.88}, {"nombre": "PARADA SILVA HUGO ANDRES", "sueldo": 660, "periodo": "Dic-Ene 2026", "orden": 2, "fechaInicio": "2025-12-15", "fechaFin": "2026-01-14", "totalHoras": 224.0, "h25": 21.0, "h50": 35.0, "h100": 29.0, "v25": 14.44, "v50": 144.38, "v100": 159.5, "total": 318.32}, {"nombre": "SERRANO GUAMAN JOSE MIGUEL", "sueldo": 660, "periodo": "Dic-Ene 2026", "orden": 2, "fechaInicio": "2025-12-15", "fechaFin": "2026-01-14", "totalHoras": 176.0, "h25": 70.0, "h50": 0, "h100": 24.0, "v25": 48.12, "v50": 0.0, "v100": 132.0, "total": 180.12}, {"nombre": "REYES MALDONADO MELANIE GABRIELA", "sueldo": 660, "periodo": "Dic-Ene 2026", "orden": 2, "fechaInicio": "2025-12-15", "fechaFin": "2026-01-14", "totalHoras": 184.0, "h25": 62.0, "h50": 0, "h100": 24.0, "v25": 42.62, "v50": 0.0, "v100": 132.0, "total": 174.62}, {"nombre": "JIMENEZ CRISTHIAN", "sueldo": 660, "periodo": "Dic-Ene 2026", "orden": 2, "fechaInicio": "2025-12-15", "fechaFin": "2026-01-14", "totalHoras": 168.0, "h25": 64.0, "h50": 0, "h100": 16.0, "v25": 44.0, "v50": 0.0, "v100": 88.0, "total": 132.0}, {"nombre": "PHILCO BAQUE JORGE FERNANDO", "sueldo": 660, "periodo": "Dic-Ene 2026", "orden": 2, "fechaInicio": "2025-12-15", "fechaFin": "2026-01-14", "totalHoras": 176.0, "h25": 62.0, "h50": 0, "h100": 8.0, "v25": 42.62, "v50": 0.0, "v100": 44.0, "total": 86.62}, {"nombre": "BAQUERIZO PALACIOS GABRIEL NATHANAEL", "sueldo": 660, "periodo": "Dic-Ene 2026", "orden": 2, "fechaInicio": "2025-12-15", "fechaFin": "2026-01-14", "totalHoras": 184.0, "h25": 60.0, "h50": 0, "h100": 8.0, "v25": 41.25, "v50": 0.0, "v100": 44.0, "total": 85.25}, {"nombre": "RODRIGUEZ DIEZ BRYAN XAVIER", "sueldo": 660, "periodo": "Dic-Ene 2026", "orden": 2, "fechaInicio": "2025-12-15", "fechaFin": "2026-01-14", "totalHoras": 184.0, "h25": 54.0, "h50": 0, "h100": 8.0, "v25": 37.12, "v50": 0.0, "v100": 44.0, "total": 81.12}, {"nombre": "GONZALEZ ROMO ISAAC ANDRES", "sueldo": 660, "periodo": "Dic-Ene 2026", "orden": 2, "fechaInicio": "2025-12-15", "fechaFin": "2026-01-14", "totalHoras": 168.0, "h25": 44.0, "h50": 0, "h100": 16.0, "v25": 30.25, "v50": 0.0, "v100": 88.0, "total": 118.25}, {"nombre": "PARADA SILVA HUGO ANDRES", "sueldo": 660, "periodo": "Ene-Feb 2026", "orden": 3, "fechaInicio": "2026-01-15", "fechaFin": "2026-02-14", "totalHoras": 219.0, "h25": 91.0, "h50": 35.0, "h100": 0, "v25": 62.56, "v50": 144.38, "v100": 0.0, "total": 206.94}, {"nombre": "SERRANO GUAMAN JOSE MIGUEL", "sueldo": 660, "periodo": "Ene-Feb 2026", "orden": 3, "fechaInicio": "2026-01-15", "fechaFin": "2026-02-14", "totalHoras": 176.0, "h25": 42.0, "h50": 0, "h100": 0, "v25": 28.88, "v50": 0.0, "v100": 0.0, "total": 28.88}, {"nombre": "REYES MALDONADO MELANIE GABRIELA", "sueldo": 660, "periodo": "Ene-Feb 2026", "orden": 3, "fechaInicio": "2026-01-15", "fechaFin": "2026-02-14", "totalHoras": 168.0, "h25": 44.0, "h50": 0, "h100": 0, "v25": 30.25, "v50": 0.0, "v100": 0.0, "total": 30.25}, {"nombre": "JIMENEZ CRISTHIAN", "sueldo": 660, "periodo": "Ene-Feb 2026", "orden": 3, "fechaInicio": "2026-01-15", "fechaFin": "2026-02-14", "totalHoras": 184.0, "h25": 94.0, "h50": 0, "h100": 0, "v25": 64.62, "v50": 0.0, "v100": 0.0, "total": 64.62}, {"nombre": "PHILCO BAQUE JORGE FERNANDO", "sueldo": 660, "periodo": "Ene-Feb 2026", "orden": 3, "fechaInicio": "2026-01-15", "fechaFin": "2026-02-14", "totalHoras": 176.0, "h25": 61.0, "h50": 0, "h100": 0, "v25": 41.94, "v50": 0.0, "v100": 0.0, "total": 41.94}, {"nombre": "BAQUERIZO PALACIOS GABRIEL NATHANAEL", "sueldo": 660, "periodo": "Ene-Feb 2026", "orden": 3, "fechaInicio": "2026-01-15", "fechaFin": "2026-02-14", "totalHoras": 176.0, "h25": 85.0, "h50": 0, "h100": 0, "v25": 58.44, "v50": 0.0, "v100": 0.0, "total": 58.44}, {"nombre": "RODRIGUEZ DIEZ BRYAN XAVIER", "sueldo": 660, "periodo": "Ene-Feb 2026", "orden": 3, "fechaInicio": "2026-01-15", "fechaFin": "2026-02-14", "totalHoras": 168.0, "h25": 43.0, "h50": 0, "h100": 0, "v25": 29.56, "v50": 0.0, "v100": 0.0, "total": 29.56}, {"nombre": "GONZALEZ ROMO ISAAC ANDRES", "sueldo": 660, "periodo": "Ene-Feb 2026", "orden": 3, "fechaInicio": "2026-01-15", "fechaFin": "2026-02-14", "totalHoras": 184.0, "h25": 73.0, "h50": 0, "h100": 0, "v25": 50.19, "v50": 0.0, "v100": 0.0, "total": 50.19}, {"nombre": "PARADA SILVA HUGO ANDRES", "sueldo": 660, "periodo": "Feb-Mar 2026", "orden": 4, "fechaInicio": "2026-02-15", "fechaFin": "2026-03-14", "totalHoras": 185.0, "h25": 56.0, "h50": 25.0, "h100": 16.0, "v25": 38.5, "v50": 103.12, "v100": 88.0, "total": 229.62}, {"nombre": "SERRANO GUAMAN JOSE MIGUEL", "sueldo": 660, "periodo": "Feb-Mar 2026", "orden": 4, "fechaInicio": "2026-02-15", "fechaFin": "2026-03-14", "totalHoras": 168.0, "h25": 34.0, "h50": 0, "h100": 16.0, "v25": 23.38, "v50": 0.0, "v100": 88.0, "total": 111.38}, {"nombre": "REYES MALDONADO MELANIE GABRIELA", "sueldo": 660, "periodo": "Feb-Mar 2026", "orden": 4, "fechaInicio": "2026-02-15", "fechaFin": "2026-03-14", "totalHoras": 168.0, "h25": 51.0, "h50": 0, "h100": 16.0, "v25": 35.06, "v50": 0.0, "v100": 88.0, "total": 123.06}, {"nombre": "JIMENEZ CRISTHIAN", "sueldo": 660, "periodo": "Feb-Mar 2026", "orden": 4, "fechaInicio": "2026-02-15", "fechaFin": "2026-03-14", "totalHoras": 88.0, "h25": 21.0, "h50": 0, "h100": 0, "v25": 14.44, "v50": 0.0, "v100": 0.0, "total": 14.44}, {"nombre": "PHILCO BAQUE JORGE FERNANDO", "sueldo": 660, "periodo": "Feb-Mar 2026", "orden": 4, "fechaInicio": "2026-02-15", "fechaFin": "2026-03-14", "totalHoras": 168.0, "h25": 54.0, "h50": 0, "h100": 16.0, "v25": 37.12, "v50": 0.0, "v100": 88.0, "total": 125.12}, {"nombre": "BAQUERIZO PALACIOS GABRIEL NATHANAEL", "sueldo": 660, "periodo": "Feb-Mar 2026", "orden": 4, "fechaInicio": "2026-02-15", "fechaFin": "2026-03-14", "totalHoras": 160.0, "h25": 91.0, "h50": 0, "h100": 16.0, "v25": 62.56, "v50": 0.0, "v100": 88.0, "total": 150.56}, {"nombre": "RODRIGUEZ DIEZ BRYAN XAVIER", "sueldo": 660, "periodo": "Feb-Mar 2026", "orden": 4, "fechaInicio": "2026-02-15", "fechaFin": "2026-03-14", "totalHoras": 168.0, "h25": 62.0, "h50": 0, "h100": 16.0, "v25": 42.62, "v50": 0.0, "v100": 88.0, "total": 130.62}, {"nombre": "GONZALEZ ROMO ISAAC ANDRES", "sueldo": 660, "periodo": "Feb-Mar 2026", "orden": 4, "fechaInicio": "2026-02-15", "fechaFin": "2026-03-14", "totalHoras": 168.0, "h25": 76.0, "h50": 0, "h100": 0, "v25": 52.25, "v50": 0.0, "v100": 0.0, "total": 52.25}, {"nombre": "SANCHEZ MACIAS MADELINE NATHALY", "sueldo": 660, "periodo": "Feb-Mar 2026", "orden": 4, "fechaInicio": "2026-02-15", "fechaFin": "2026-03-14", "totalHoras": 48.0, "h25": 0, "h50": 0, "h100": 0, "v25": 0.0, "v50": 0.0, "v100": 0.0, "total": 0.0}, {"nombre": "PARADA SILVA HUGO ANDRES", "sueldo": 660, "periodo": "Mar-Abr 2026", "orden": 5, "fechaInicio": "2026-03-15", "fechaFin": "2026-04-14", "totalHoras": 231.0, "h25": 70.0, "h50": 45.0, "h100": 18.0, "v25": 48.12, "v50": 185.62, "v100": 99.0, "total": 332.74}, {"nombre": "SERRANO GUAMAN JOSE MIGUEL", "sueldo": 660, "periodo": "Mar-Abr 2026", "orden": 5, "fechaInicio": "2026-03-15", "fechaFin": "2026-04-14", "totalHoras": 184.0, "h25": 74.0, "h50": 0, "h100": 8.0, "v25": 50.88, "v50": 0.0, "v100": 44.0, "total": 94.88}, {"nombre": "REYES MALDONADO MELANIE GABRIELA", "sueldo": 660, "periodo": "Mar-Abr 2026", "orden": 5, "fechaInicio": "2026-03-15", "fechaFin": "2026-04-14", "totalHoras": 184.0, "h25": 90.0, "h50": 0, "h100": 0, "v25": 61.88, "v50": 0.0, "v100": 0.0, "total": 61.88}, {"nombre": "PHILCO BAQUE JORGE FERNANDO", "sueldo": 660, "periodo": "Mar-Abr 2026", "orden": 5, "fechaInicio": "2026-03-15", "fechaFin": "2026-04-14", "totalHoras": 128.0, "h25": 50.0, "h50": 0, "h100": 16.0, "v25": 34.38, "v50": 0.0, "v100": 88.0, "total": 122.38}, {"nombre": "BAQUERIZO PALACIOS GABRIEL NATHANAEL", "sueldo": 660, "periodo": "Mar-Abr 2026", "orden": 5, "fechaInicio": "2026-03-15", "fechaFin": "2026-04-14", "totalHoras": 191.0, "h25": 54.0, "h50": 2.0, "h100": 13.0, "v25": 37.12, "v50": 8.25, "v100": 71.5, "total": 116.87}, {"nombre": "JIMENEZ CRISTHIAN", "sueldo": 660, "periodo": "Mar-Abr 2026", "orden": 5, "fechaInicio": "2026-03-15", "fechaFin": "2026-04-14", "totalHoras": 176.0, "h25": 48.0, "h50": 0, "h100": 16.0, "v25": 33.0, "v50": 0.0, "v100": 88.0, "total": 121.0}, {"nombre": "GONZALEZ ROMO ISAAC ANDRES", "sueldo": 660, "periodo": "Mar-Abr 2026", "orden": 5, "fechaInicio": "2026-03-15", "fechaFin": "2026-04-14", "totalHoras": 144.0, "h25": 64.0, "h50": 0, "h100": 0, "v25": 44.0, "v50": 0.0, "v100": 0.0, "total": 44.0}, {"nombre": "SANCHEZ MACIAS MADELINE NATHALY", "sueldo": 660, "periodo": "Mar-Abr 2026", "orden": 5, "fechaInicio": "2026-03-15", "fechaFin": "2026-04-14", "totalHoras": 184.0, "h25": 12.0, "h50": 0, "h100": 0, "v25": 8.25, "v50": 0.0, "v100": 0.0, "total": 8.25}, {"nombre": "PARADA SILVA HUGO ANDRES", "sueldo": 660, "periodo": "Nov-Dic 2025", "orden": 1, "fechaInicio": "2025-11-15", "fechaFin": "2025-12-14", "totalHoras": 211.0, "h25": 35.0, "h50": 35.0, "h100": 0, "v25": 24.06, "v50": 144.38, "v100": 0.0, "total": 168.44}, {"nombre": "SERRANO GUAMAN JOSE MIGUEL", "sueldo": 660, "periodo": "Nov-Dic 2025", "orden": 1, "fechaInicio": "2025-11-15", "fechaFin": "2025-12-14", "totalHoras": 176.0, "h25": 81.0, "h50": 0, "h100": 0, "v25": 55.69, "v50": 0.0, "v100": 0.0, "total": 55.69}, {"nombre": "REYES MALDONADO MELANIE GABRIELA", "sueldo": 660, "periodo": "Nov-Dic 2025", "orden": 1, "fechaInicio": "2025-11-15", "fechaFin": "2025-12-14", "totalHoras": 176.0, "h25": 59.0, "h50": 0, "h100": 0, "v25": 40.56, "v50": 0.0, "v100": 0.0, "total": 40.56}, {"nombre": "JIMENEZ CRISTHIAN", "sueldo": 660, "periodo": "Nov-Dic 2025", "orden": 1, "fechaInicio": "2025-11-15", "fechaFin": "2025-12-14", "totalHoras": 160.0, "h25": 103.0, "h50": 0, "h100": 0, "v25": 70.81, "v50": 0.0, "v100": 0.0, "total": 70.81}, {"nombre": "PHILCO BAQUE JORGE FERNANDO", "sueldo": 660, "periodo": "Nov-Dic 2025", "orden": 1, "fechaInicio": "2025-11-15", "fechaFin": "2025-12-14", "totalHoras": 176.0, "h25": 33.0, "h50": 0, "h100": 0, "v25": 22.69, "v50": 0.0, "v100": 0.0, "total": 22.69}, {"nombre": "BAQUERIZO PALACIOS GABRIEL NATHANAEL", "sueldo": 660, "periodo": "Nov-Dic 2025", "orden": 1, "fechaInicio": "2025-11-15", "fechaFin": "2025-12-14", "totalHoras": 176.0, "h25": 60.0, "h50": 0, "h100": 0, "v25": 41.25, "v50": 0.0, "v100": 0.0, "total": 41.25}, {"nombre": "RODRIGUEZ DIEZ BRYAN XAVIER", "sueldo": 660, "periodo": "Nov-Dic 2025", "orden": 1, "fechaInicio": "2025-11-15", "fechaFin": "2025-12-14", "totalHoras": 160.0, "h25": 59.0, "h50": 0, "h100": 0, "v25": 40.56, "v50": 0.0, "v100": 0.0, "total": 40.56}, {"nombre": "GONZALEZ ROMO ISAAC ANDRES", "sueldo": 660, "periodo": "Nov-Dic 2025", "orden": 1, "fechaInicio": "2025-11-15", "fechaFin": "2025-12-14", "totalHoras": 176.0, "h25": 40.0, "h50": 0, "h100": 0, "v25": 27.5, "v50": 0.0, "v100": 0.0, "total": 27.5}];
+const PERIODOS_ORDEN = ["Nov-Dic 2025", "Dic-Ene 2026", "Ene-Feb 2026", "Feb-Mar 2026", "Mar-Abr 2026", "Abr-May 2026"];
+let datosFiltrados = [...DATA];
+let charts = {};
+
+function init() {
+  const sel1 = document.getElementById('filtroDesde');
+  const sel2 = document.getElementById('filtroHasta');
+  PERIODOS_ORDEN.forEach((p,i) => {
+    sel1.innerHTML += `<option value="${i}">${p}</option>`;
+    sel2.innerHTML += `<option value="${i}" ${i===PERIODOS_ORDEN.length-1?'selected':''}>${p}</option>`;
+  });
+  poblarEmpleados();
+  aplicarFiltros();
+}
+
+function poblarEmpleados() {
+  const sel = document.getElementById('filtroEmpleado');
+  const nombres = [...new Set(DATA.map(d=>d.nombre))].sort();
+  sel.innerHTML = '<option value="">Todos</option>';
+  nombres.forEach(n => sel.innerHTML += `<option value="${n}">${n}</option>`);
+}
+
+function resetFiltros() {
+  document.getElementById('filtroDesde').value = '0';
+  document.getElementById('filtroHasta').value = PERIODOS_ORDEN.length - 1;
+  document.getElementById('filtroEmpleado').value = '';
+  aplicarFiltros();
+}
+
+function aplicarFiltros() {
+  const desde = parseInt(document.getElementById('filtroDesde').value);
+  const hasta = parseInt(document.getElementById('filtroHasta').value);
+  const emp = document.getElementById('filtroEmpleado').value;
+  const periodosActivos = PERIODOS_ORDEN.slice(desde, hasta + 1);
+
+  datosFiltrados = DATA.filter(d => {
+    if (!periodosActivos.includes(d.periodo)) return false;
+    if (emp && d.nombre !== emp) return false;
+    return true;
+  });
+
+  renderKPIs();
+  renderCharts(periodosActivos);
+  renderTabla();
+}
+
+function renderKPIs() {
+  const totalEmp = new Set(datosFiltrados.map(d=>d.nombre)).size;
+  const totalH = datosFiltrados.reduce((s,d)=>s+d.totalHoras,0);
+  const totalPago = datosFiltrados.reduce((s,d)=>s+d.total,0);
+  const totalPeriodos = new Set(datosFiltrados.map(d=>d.periodo)).size;
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="value">${totalEmp}</div><div class="label">Empleados</div></div>
+    <div class="kpi"><div class="value">${totalH.toFixed(1)}</div><div class="label">Total Horas Extras</div></div>
+    <div class="kpi"><div class="value money">${totalPago.toLocaleString('es-EC',{style:'currency',currency:'USD'})}</div><div class="label">Total a Cancelar</div></div>
+    <div class="kpi"><div class="value">${totalPeriodos}</div><div class="label">Periodos</div></div>
+  `;
+}
+
+function agrupar(datos, campo, valCampos) {
+  const map = {};
+  datos.forEach(d => {
+    const k = d[campo];
+    if (!map[k]) map[k] = {};
+    valCampos.forEach(v => { map[k][v] = (map[k][v]||0) + d[v]; });
+  });
+  return map;
+}
+
+function destroyChart(name) { if(charts[name]) { charts[name].destroy(); } }
+
+function renderCharts(periodosActivos) {
+  // 1. Horas por empleado consolidado (stacked bar)
+  const horasEmp = agrupar(datosFiltrados, 'nombre', ['h25','h50','h100','totalHoras']);
+  const nombresH = Object.keys(horasEmp).sort((a,b) => horasEmp[b].totalHoras - horasEmp[a].totalHoras);
+  destroyChart('chartHorasEmp');
+  charts.chartHorasEmp = new Chart(document.getElementById('chartHorasEmp'), {
+    type:'bar',
+    data:{
+      labels: nombresH,
+      datasets:[
+        { label:'H 25%', data:nombresH.map(n=>horasEmp[n].h25), backgroundColor:'#3b82f6' },
+        { label:'H 50%', data:nombresH.map(n=>horasEmp[n].h50), backgroundColor:'#f59e0b' },
+        { label:'H 100%', data:nombresH.map(n=>horasEmp[n].h100), backgroundColor:'#ef4444' },
+      ]
+    },
+    options:{ responsive:true, plugins:{ legend:{ labels:{ color:'#94a3b8' } } }, scales:{ x:{ stacked:true, ticks:{ color:'#94a3b8', maxRotation:45, font:{size:9} } }, y:{ stacked:true, ticks:{ color:'#94a3b8' }, grid:{ color:'#1e293b' } } } }
+  });
+
+  // 2. Total a cancelar por empleado
+  const pagoEmp = agrupar(datosFiltrados, 'nombre', ['total']);
+  const nombresP = Object.keys(pagoEmp).sort((a,b) => pagoEmp[b].total - pagoEmp[a].total);
+  destroyChart('chartPagoEmp');
+  charts.chartPagoEmp = new Chart(document.getElementById('chartPagoEmp'), {
+    type:'bar',
+    data:{
+      labels: nombresP,
+      datasets:[{ label:'Total $', data:nombresP.map(n=>pagoEmp[n].total), backgroundColor:'#4ade80' }]
+    },
+    options:{ indexAxis:'x', responsive:true, plugins:{ legend:{ labels:{ color:'#94a3b8' } } }, scales:{ x:{ ticks:{ color:'#94a3b8', maxRotation:45, font:{size:9} } }, y:{ ticks:{ color:'#94a3b8', callback:v=>'$'+v.toFixed(0) }, grid:{ color:'#1e293b' } } } }
+  });
+
+  // 3. Horas por periodo
+  const horasPer = {};
+  periodosActivos.forEach(p => { horasPer[p] = { h25:0, h50:0, h100:0 }; });
+  datosFiltrados.forEach(d => {
+    if (horasPer[d.periodo]) {
+      horasPer[d.periodo].h25 += d.h25;
+      horasPer[d.periodo].h50 += d.h50;
+      horasPer[d.periodo].h100 += d.h100;
+    }
+  });
+  destroyChart('chartHorasPeriodo');
+  charts.chartHorasPeriodo = new Chart(document.getElementById('chartHorasPeriodo'), {
+    type:'bar',
+    data:{
+      labels: periodosActivos,
+      datasets:[
+        { label:'H 25%', data:periodosActivos.map(p=>horasPer[p].h25), backgroundColor:'#3b82f6' },
+        { label:'H 50%', data:periodosActivos.map(p=>horasPer[p].h50), backgroundColor:'#f59e0b' },
+        { label:'H 100%', data:periodosActivos.map(p=>horasPer[p].h100), backgroundColor:'#ef4444' },
+      ]
+    },
+    options:{ responsive:true, plugins:{ legend:{ labels:{ color:'#94a3b8' } } }, scales:{ x:{ stacked:true, ticks:{ color:'#94a3b8' } }, y:{ stacked:true, ticks:{ color:'#94a3b8' }, grid:{ color:'#1e293b' } } } }
+  });
+
+  // 4. Gasto por periodo (line)
+  const gastoPer = {};
+  periodosActivos.forEach(p => { gastoPer[p] = 0; });
+  datosFiltrados.forEach(d => { if(gastoPer[d.periodo]!==undefined) gastoPer[d.periodo] += d.total; });
+  destroyChart('chartGastoPeriodo');
+  charts.chartGastoPeriodo = new Chart(document.getElementById('chartGastoPeriodo'), {
+    type:'line',
+    data:{
+      labels: periodosActivos,
+      datasets:[{ label:'Gasto Total $', data:periodosActivos.map(p=>gastoPer[p]), borderColor:'#f43f5e', backgroundColor:'rgba(244,63,94,.15)', fill:true, tension:.3, pointRadius:6, pointBackgroundColor:'#f43f5e' }]
+    },
+    options:{ responsive:true, plugins:{ legend:{ labels:{ color:'#94a3b8' } } }, scales:{ x:{ ticks:{ color:'#94a3b8' } }, y:{ ticks:{ color:'#94a3b8', callback:v=>'$'+v.toFixed(0) }, grid:{ color:'#1e293b' } } } }
+  });
+
+  // 5. Valores pagados detalle por empleado y periodo (grouped)
+  const nombres = [...new Set(datosFiltrados.map(d=>d.nombre))].sort();
+  const colores = ['#3b82f6','#f59e0b','#ef4444','#4ade80','#a78bfa','#f472b6'];
+  const datasets = periodosActivos.map((p,i) => {
+    const vals = nombres.map(n => {
+      const match = datosFiltrados.filter(d=>d.nombre===n && d.periodo===p);
+      return match.reduce((s,d)=>s+d.total,0);
+    });
+    return { label:p, data:vals, backgroundColor:colores[i%colores.length] };
+  });
+  destroyChart('chartValoresDetalle');
+  charts.chartValoresDetalle = new Chart(document.getElementById('chartValoresDetalle'), {
+    type:'bar',
+    data:{ labels:nombres, datasets },
+    options:{ responsive:true, plugins:{ legend:{ labels:{ color:'#94a3b8' } } }, scales:{ x:{ ticks:{ color:'#94a3b8', maxRotation:45, font:{size:9} } }, y:{ ticks:{ color:'#94a3b8', callback:v=>'$'+v.toFixed(0) }, grid:{ color:'#1e293b' } } } }
+  });
+}
+
+function renderTabla() {
+  let rows = datosFiltrados.sort((a,b) => a.periodo.localeCompare(b.periodo) || a.nombre.localeCompare(b.nombre));
+  let html = '<table><thead><tr><th>Periodo</th><th>Cédula</th><th>Nombre</th><th>Cargo</th><th>H 25%</th><th>H 50%</th><th>H 100%</th><th>Total H</th><th>V 25%</th><th>V 50%</th><th>V 100%</th><th>Total $</th></tr></thead><tbody>';
+  rows.forEach(d => {
+    html += `<tr>
+      <td>${d.periodo}</td><td>${d.cedula}</td><td>${d.nombre}</td><td>${d.cargo}</td>
+      <td>${d.h25}</td><td>${d.h50}</td><td>${d.h100}</td><td>${d.totalHoras}</td>
+      <td class="money">${d.v25.toFixed(2)}</td><td class="money">${d.v50.toFixed(2)}</td><td class="money">${d.v100.toFixed(2)}</td>
+      <td class="money" style="font-weight:700">${d.total.toFixed(2)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('tablaWrap').innerHTML = html;
+}
+
+function exportarExcel() {
+  const data = datosFiltrados.map(d => ({
+    'Periodo': d.periodo,
+    'Cédula': d.cedula || '',
+    'Nombre': d.nombre,
+    'Cargo': d.cargo || '',
+    'H 25%': d.h25,
+    'H 50%': d.h50,
+    'H 100%': d.h100,
+    'Total Horas': d.totalHoras,
+    'V 25%': d.v25,
+    'V 50%': d.v50,
+    'V 100%': d.v100,
+    'Total $': d.total
+  }));
+  
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Horas Extras');
+  
+  const filename = 'Horas_Extras_' + new Date().toISOString().slice(0,10) + '.xlsx';
+  XLSX.writeFile(wb, filename);
+}
+
+init();
+</script>
+</body>
+</html>
