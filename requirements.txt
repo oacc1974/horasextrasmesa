@@ -1,7 +1,4 @@
-pandas==2.2.2
 flask
 flask-cors
 openpyxl
-numpy==1.22.3
-streamlit==1.35.0
-plotly==5.22.0
+numpy
