@@ -61,6 +61,18 @@ tr:hover td { background:#334155; }
   </div>
 </div>
 
+<div style="background:#1e293b;padding:16px 30px;margin-bottom:20px;border-bottom:1px solid #334155;">
+  <h3 style="color:#38bdf8;margin-bottom:12px;font-size:.95rem;">📁 Administrar Archivos Excel</h3>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+    <input type="file" id="fileInput" accept=".xlsx" style="background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:8px 12px;font-size:.85rem;">
+    <button onclick="subirArchivo()" style="background:#10b981;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:600;">Subir Excel</button>
+    <button onclick="generarDashboard()" style="background:#f59e0b;color:#0f172a;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:600;">Regenerar Dashboard</button>
+    <button onclick="listarArchivos()" style="background:#6366f1;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:600;">Ver Archivos</button>
+  </div>
+  <div id="uploadStatus" style="margin-top:8px;font-size:.8rem;color:#94a3b8;"></div>
+  <div id="filesList" style="margin-top:12px;font-size:.85rem;color:#94a3b8;"></div>
+</div>
+
 <div class="kpis" id="kpis"></div>
 
 <div class="charts">
@@ -281,6 +293,81 @@ function exportarExcel() {
   
   const filename = 'Horas_Extras_' + new Date().toISOString().slice(0,10) + '.xlsx';
   XLSX.writeFile(wb, filename);
+}
+
+async function subirArchivo() {
+  const fileInput = document.getElementById('fileInput');
+  const status = document.getElementById('uploadStatus');
+  
+  if (!fileInput.files[0]) {
+    status.innerHTML = '<span style="color:#ef4444">Selecciona un archivo Excel</span>';
+    return;
+  }
+  
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  
+  status.innerHTML = '<span style="color:#f59e0b">Subiendo archivo...</span>';
+  
+  try {
+    const response = await fetch('/upload', {
+      method: 'POST',
+      body: formData
+    });
+    const result = await response.json();
+    
+    if (response.ok) {
+      status.innerHTML = `<span style="color:#4ade80">Archivo subido: ${result.filename}</span>`;
+      fileInput.value = '';
+    } else {
+      status.innerHTML = `<span style="color:#ef4444">Error: ${result.error}</span>`;
+    }
+  } catch (error) {
+    status.innerHTML = `<span style="color:#ef4444">Error de conexión: ${error.message}</span>`;
+  }
+}
+
+async function generarDashboard() {
+  const status = document.getElementById('uploadStatus');
+  status.innerHTML = '<span style="color:#f59e0b">Regenerando dashboard...</span>';
+  
+  try {
+    const response = await fetch('/generate', {
+      method: 'POST'
+    });
+    const result = await response.json();
+    
+    if (response.ok) {
+      status.innerHTML = `<span style="color:#4ade80">${result.message}</span>`;
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      status.innerHTML = `<span style="color:#ef4444">Error: ${result.error}</span>`;
+    }
+  } catch (error) {
+    status.innerHTML = `<span style="color:#ef4444">Error de conexión: ${error.message}</span>`;
+  }
+}
+
+async function listarArchivos() {
+  const filesList = document.getElementById('filesList');
+  filesList.innerHTML = 'Cargando archivos...';
+  
+  try {
+    const response = await fetch('/api/files');
+    const result = await response.json();
+    
+    if (response.ok) {
+      if (result.files.length === 0) {
+        filesList.innerHTML = 'No hay archivos Excel subidos.';
+      } else {
+        filesList.innerHTML = '<strong>Archivos disponibles:</strong><br>' + result.files.map(f => `• ${f}`).join('<br>');
+      }
+    } else {
+      filesList.innerHTML = `<span style="color:#ef4444">Error: ${result.error}</span>`;
+    }
+  } catch (error) {
+    filesList.innerHTML = `<span style="color:#ef4444">Error de conexión: ${error.message}</span>`;
+  }
 }
 
 init();
