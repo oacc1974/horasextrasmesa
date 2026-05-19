@@ -62,8 +62,11 @@ tr:hover td { background:#334155; }
 </div>
 
 <div style="background:#1e293b;padding:16px 30px;margin-bottom:20px;border-bottom:1px solid #334155;">
-  <h3 style="color:#38bdf8;margin-bottom:12px;font-size:.95rem;">📁 Administrar Archivos Excel</h3>
-  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <h3 style="color:#38bdf8;margin:0;font-size:.95rem;">📁 Administrar Archivos Excel</h3>
+    <button onclick="logout()" style="background:#ef4444;color:#fff;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:.85rem;">Cerrar Sesión</button>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px;">
     <input type="file" id="fileInput" accept=".xlsx" style="background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:8px 12px;font-size:.85rem;">
     <button onclick="subirArchivo()" style="background:#10b981;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:600;">Subir Excel</button>
     <button onclick="generarDashboard()" style="background:#f59e0b;color:#0f172a;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-weight:600;">Regenerar Dashboard</button>
@@ -101,6 +104,25 @@ const DATA = [{"nombre": "PARADA SILVA HUGO ANDRES", "sueldo": 660, "periodo": "
 const PERIODOS_ORDEN = ["Nov-Dic 2025", "Dic-Ene 2026", "Ene-Feb 2026", "Feb-Mar 2026", "Mar-Abr 2026", "Abr-May 2026"];
 let datosFiltrados = [...DATA];
 let charts = {};
+
+// Obtener credenciales de la URL (pasadas por el login)
+const urlParams = new URLSearchParams(window.location.search);
+const authCredentials = {
+  username: urlParams.get('username') || '',
+  password: urlParams.get('password') || ''
+};
+
+function getAuthHeaders() {
+  return {
+    'X-Auth-Username': authCredentials.username || '',
+    'X-Auth-Password': authCredentials.password || ''
+  };
+}
+
+function logout() {
+  localStorage.removeItem('auth');
+  window.location.href = '/';
+}
 
 function init() {
   const sel1 = document.getElementById('filtroDesde');
@@ -313,7 +335,7 @@ async function subirArchivo() {
     const response = await fetch('/upload', {
       method: 'POST',
       body: formData,
-      credentials: 'include'
+      headers: getAuthHeaders()
     });
     const result = await response.json();
     
@@ -335,7 +357,7 @@ async function generarDashboard() {
   try {
     const response = await fetch('/generate', {
       method: 'POST',
-      credentials: 'include'
+      headers: getAuthHeaders()
     });
     const result = await response.json();
     
@@ -356,7 +378,7 @@ async function listarArchivos() {
   
   try {
     const response = await fetch('/api/files', {
-      credentials: 'include'
+      headers: getAuthHeaders()
     });
     const result = await response.json();
     
